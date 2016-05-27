@@ -1,24 +1,23 @@
 require 'spec_helper'
 
-describe ADM do
+describe WNS do
   it "should raise an error if the oauth keys aren't provided" do
-    expect {ADM.new}.to raise_error
+    expect {WNS.new}.to raise_error
   end
 
   describe "sending notification" do
-    let(:access_token) { 'Atc|MQEWYJxEnP3I1ND03ZzbY_NxQkA7Kn7Aioev_OfMRcyVQ4NxGzJMEaKJ8f0lSOiV-yW270o6fnkI' }
+    let(:access_token) { 'EgAcAQMAAAAALYAAY/c+Huwi3Fv4Ck10UrKNmtxRO6Njk2MgA=' }
     let(:expires_in) { 3600 }
-    let(:client_id) { 'amzn1.application-oa2-client.0ba5f9a3403f412ab985132164af24d7' }
-    let(:client_secret) { '5c6444a8847b398aa901ccf913aeb30364304860c2d59384b38443fb22a9b7d9' }
+    let(:client_id) { 'ms-app://s-1-15-2-012345678-012345678-012345678-012345678-012345678-012345678-012345678' }
+    let(:client_secret) { 'abcdefghijklmnopqrstuvwxy0123456' }
     let(:invalid_client_secret) { 'invalid' }
 
-    let(:registration_id) {'amzn1.adm-registration.v1.Y29tLmFtYXpvbi5EZXZpY2VNZXNzYWdpbmcuYL3FOMUlCWEdpdm5TZ3RWbm9XUT0hN0lrSU1YUlNSVVBpT2pOd0lnWktvUT09'}
-    let(:registration_ids) { [ registration_id ]}
-    let(:push_url) { /.*https:\/\/api.amazon.com\/messaging\/registrations\/.*\/messages/ }
+    let(:channel) {'https://cloud.notify.windows.com/?token=AQE%2525bU%252fSjZOCvRjjpILow%253d%253d'}
+    let(:channels) { [ channel ]}
 
     let(:valid_req_access_body) do
       { :grant_type => 'client_credentials',
-        :scope => 'messaging:push',
+        :scope => 'notify.windows.com',
         :client_id => client_id,
         :client_secret => client_secret
       }
@@ -32,7 +31,7 @@ describe ADM do
 
     let(:invalid_req_access_body) do
       { :grant_type => 'client_credentials',
-        :scope => 'messaging:push',
+        :scope => 'notify.windows.com',
         :client_id => client_id,
         :client_secret => invalid_client_secret
       }
@@ -40,10 +39,11 @@ describe ADM do
 
     let(:valid_response_access_headers) do
       {
-        'X-Amzn-RequestId' => 'd917ceac-2245-11e2-a270-0bc161cb589d',
         'Content-Type' => 'application/json'
       }
     end
+
+    let(:empty_push_body) do {} end
 
     let(:valid_push_body) do
       {
@@ -53,25 +53,18 @@ describe ADM do
 
     let(:valid_push_headers) do
       {
-        "Content-Type" => 'application/json',
-        "X-Amzn-Type-Version" => 'com.amazon.device.messaging.ADMMessage@1.0',
-        "Accept" => 'application/json',
-        "X-Amzn-Accept-Type" => 'com.amazon.device.messaging.ADMSendResult@1.0',
-        "Authorization" => "Bearer #{access_token}"
+        "Authorization" => "Bearer #{access_token}",
+        "Content-Type" => 'application/octet-stream',
+        "X-WNS-Type" => "wns/raw"
       }
     end
 
     let(:valid_push_response_headers) do
-        {
-          "X-Amzn-Data-md5" => 't5psxALRTM7WN30Q8f20tw==',
-          "X-Amzn-RequestId" => 'e8bef3ce-242e-11e2-8484-47fz4656fc00d',
-          "Content-Type" => 'application/json',
-          "X-Amzn-Type-Version" => 'com.amazon.device.messaging.ADMSendResult@1.0'
-        }
+        {        }
     end
 
     before(:each) do
-      stub_request(:post, ADM::REQUEST_ACCESS_URL).with(
+      stub_request(:post, WNS::REQUEST_ACCESS_URL).with(
         :body => valid_req_access_body,
         :headers => valid_req_access_headers
       ).to_return(
@@ -85,13 +78,11 @@ describe ADM do
         :status => 200
       )
 
-      stub_request(:post, push_url).with(
-        :body => valid_push_body.to_json,
+      stub_request(:post, channel).with(
+        :body => empty_push_body.to_json,
         :headers => valid_push_headers
       ).to_return(
-        # ref: https://developer.amazon.com/sdk/adm/sending-message.html
         :body => {
-          'registrationID' => registration_id
         }.to_json,
         :headers => valid_push_response_headers,
         :status => 200
@@ -99,34 +90,34 @@ describe ADM do
     end
 
     context "without data" do
-      it "should get an access token using POST to ADM server" do
-        adm = ADM.new(client_id, client_secret)
-        adm.send(:get_access_token)
-        adm.instance_variable_get(:@access_token).should eq(access_token)
-        adm.instance_variable_get(:@expires_in).should eq(expires_in)
+      it "should get an access token using POST to WNS server" do
+        wns = WNS.new(client_id, client_secret)
+        wns.send(:get_access_token)
+        wns.instance_variable_get(:@access_token).should eq(access_token)
+        wns.instance_variable_get(:@expires_in).should eq(expires_in)
       end
 
-      it "should send notification without data using POST to ADM server" do
-        adm = ADM.new(client_id, client_secret)
-        responses = adm.send_notification(registration_ids)
-        responses.each_key { |reg_id|
-          responses[reg_id].should include(:response => 'success', :status_code => 200, :body => {'registrationID' => reg_id})
+      it "should send notification without data using POST to WNS server" do
+        wns = WNS.new(client_id, client_secret)
+        responses = wns.send_notification(channels)
+        responses.each_key { |chan|
+          responses[chan].should include(:response => 'success', :status_code => 200, :body => {})
         }
       end
     end
 
     context "with data" do
       let!(:stub_with_data){
-        stub_request(:post, push_url).
+        stub_request(:post, channel).
           with(:body => {:data => { :score => "5x1", :time => "15:10"}}.to_json,
                :headers => valid_push_headers ).
           to_return(:status => 200, :body => "", :headers => {})
       }
       before do
       end
-      it "should send the data in a post request to ADM" do
-        gcm = ADM.new(client_id, client_secret)
-        gcm.send_notification(registration_ids, { :data => { :score => "5x1", :time => "15:10"} })
+      it "should send the data in a post request to WNS" do
+        wns = WNS.new(client_id, client_secret)
+        wns.send_notification(channels, { :data => { :score => "5x1", :time => "15:10"} })
         stub_with_data.should have_been_requested
       end
     end
@@ -146,11 +137,11 @@ describe ADM do
         }
       end
 
-      subject { ADM.new(client_id, client_secret) }
+      subject { WNS.new(client_id, client_secret) }
 
       context "on access token request failure code 400" do
         before do
-          stub_request(:post, ADM::REQUEST_ACCESS_URL).with(
+          stub_request(:post, WNS::REQUEST_ACCESS_URL).with(
             mock_invalid_access_request_attributes
           ).to_return(
             :body => { 'reason' => 'UNAUTHORIZED_CLIENT' }.to_json,
@@ -159,35 +150,41 @@ describe ADM do
           )
         end
         it "should raise an AccessKeyError exception" do
-          adm = ADM.new(client_id, invalid_client_secret)
-          expect { adm.send_notification(registration_ids) }.to raise_error(AccessKeyError)
+          wns = WNS.new(client_id, invalid_client_secret)
+          expect { wns.send_notification(channels) }.to raise_error(AccessKeyError)
        end
       end
 
       context "on push failure code 400" do
         before do
-          stub_request(:post, push_url).with(
-            mock_request_attributes
+          stub_request(:post, channel).with(
+            {
+              :body => empty_push_body,
+              :headers => valid_push_headers
+            }
           ).to_return(
-            :body => { 'reason' => 'InvalidChecksum' }.to_json,
+            :body => { 'reason' => 'Wrong headers' }.to_json,
             :headers => valid_push_response_headers,
             :status => 400
           )
         end
         it "should not send notification due to 400" do
-          responses = subject.send_notification(registration_ids)
-          responses.each_key { |reg_id|
-            responses[reg_id].should include(:response => 'Invalid request',
+          responses = subject.send_notification(channels)
+          responses.each_key { |chan|
+            responses[chan].should include(:response => 'Wrong headers',
                                              :status_code => 400,
-                                             :reason => 'InvalidChecksum')
+                                             :reason => 'Wrong headers')
           }
         end
       end
 
       context "on push failure code 401" do
         before do
-          stub_request(:post, push_url).with(
-            mock_request_attributes
+          stub_request(:post, channel).with(
+            {
+              :body => empty_push_body,
+              :headers => valid_push_headers
+            }
           ).to_return(
             :body => { 'reason' => 'AccessTokenExpired' }.to_json,
             :headers => valid_push_response_headers,
@@ -195,9 +192,9 @@ describe ADM do
           )
         end
         it "should not send notification due to 401" do
-          responses = subject.send_notification(registration_ids)
-          responses.each_key { |reg_id|
-            responses[reg_id].should include(:response => 'Client authentication failed or auth token invalid',
+          responses = subject.send_notification(channels)
+          responses.each_key { |chan|
+            responses[chan].should include(:response => 'Access token expired',
                                              :status_code => 401,
                                              :reason => 'AccessTokenExpired')
           }
@@ -206,48 +203,57 @@ describe ADM do
 
       context "on push failure code 413" do
         before do
-          stub_request(:post, push_url).with(
-            mock_request_attributes
+          stub_request(:post, channel).with(
+            {
+              :body => empty_push_body,
+              :headers => valid_push_headers
+            }
           ).to_return(
-            :body => { 'reason' => 'MessageTooLarge' }.to_json,
+            :body => { 'reason' => 'Payload is too large' }.to_json,
             :headers => valid_push_response_headers,
             :status => 413
           )
         end
         it "should not send notification due to 413" do
-          responses = subject.send_notification(registration_ids)
-          responses.each_key { |reg_id|
-            responses[reg_id].should include(:response => 'Payload it too large',
+          responses = subject.send_notification(channels)
+          responses.each_key { |chan|
+            responses[chan].should include(:response => 'Payload is too large',
                                              :status_code => 413,
-                                             :reason => 'MessageTooLarge')
+                                             :reason => 'Payload is too large')
           }
         end
       end
 
-      context "on push failure code 429" do
+      context "on push failure code 406" do
         before do
-          stub_request(:post, push_url).with(
-            mock_request_attributes
+          stub_request(:post, channel).with(
+            {
+              :body => empty_push_body,
+              :headers => valid_push_headers
+            }
           ).to_return(
-            :body => { 'reason' => 'TooManyRequests' }.to_json,
+            :body => { 'reason' => 'Exceeded maximum allowable rate of messages' }.to_json,
             :headers => valid_push_response_headers,
-            :status => 429
+            :status => 406
           )
         end
         it "should not send notification due to 429" do
-          responses = subject.send_notification(registration_ids)
-          responses.each_key { |reg_id|
-            responses[reg_id].should include(:response => 'Exceeded maximum allowable rate of messages',
-                                             :status_code => 429,
-                                             :reason => 'TooManyRequests')
+          responses = subject.send_notification(channels)
+          responses.each_key { |chan|
+            responses[chan].should include(:response => 'Exceeded maximum allowable rate of messages',
+                                             :status_code => 406,
+                                             :reason => 'Exceeded maximum allowable rate of messages')
           }
         end
       end
 
       context "on push failure code 500" do
         before do
-          stub_request(:post, push_url).with(
-            mock_request_attributes
+          stub_request(:post, channel).with(
+            {
+              :body => empty_push_body,
+              :headers => valid_push_headers
+            }
           ).to_return(
             :body => "",
             :headers => valid_push_response_headers,
@@ -255,9 +261,9 @@ describe ADM do
           )
         end
         it "should not send notification due to 500" do
-          responses = subject.send_notification(registration_ids)
-          responses.each_key { |reg_id|
-            responses[reg_id].should include(:response => 'There was an internal error in the ADM server',
+          responses = subject.send_notification(channels)
+          responses.each_key { |chan|
+            responses[chan].should include(:response => 'There was an internal error in the WNS server',
                                              :status_code => 500,
                                              :reason => 'unknown')
           }
@@ -266,8 +272,11 @@ describe ADM do
 
       context "on push failure code 503" do
         before do
-          stub_request(:post, push_url).with(
-            mock_request_attributes
+          stub_request(:post, channel).with(
+            {
+              :body => empty_push_body,
+              :headers => valid_push_headers
+            }
           ).to_return(
             :body => "",
             :headers => valid_push_response_headers,
@@ -275,15 +284,14 @@ describe ADM do
           )
         end
         it "should not send notification due to 503" do
-          responses = subject.send_notification(registration_ids)
-          responses.each_key { |reg_id|
-            responses[reg_id].should include(:response => 'Server is temporarily unavailable',
+          responses = subject.send_notification(channels)
+          responses.each_key { |chan|
+            responses[chan].should include(:response => 'Server is temporarily unavailable',
                                              :status_code => 503,
                                              :reason => 'unknown')
           }
         end
       end
-
     end
   end
 end

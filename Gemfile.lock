@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    adm (0.0.1)
+    wns (0.0.1)
       httparty
       json
 
@@ -39,8 +39,8 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
-  adm!
   ci_reporter
   rake
   rspec
   webmock
+  wns!

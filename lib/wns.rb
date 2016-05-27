@@ -27,7 +27,7 @@ class WNS
     access_token = get_access_token()
 
     params = {
-      :body => ({:data => {}}.merge(options)).to_json,
+      :body => options.to_json,
       :headers => {
         'Authorization' => "Bearer #{access_token}",
         'Content-Type' => WNS_PUSH_CONTENT_TYPE,
@@ -37,13 +37,14 @@ class WNS
 
     responses = {}
 
-    channels.each do |channel|
-
-      response = self.class.post(channel, params)
-      responses[channel] = build_response(response)
-
+    begin
+      channels.each do |channel|
+        response = self.class.post(channel, params)
+        responses[channel] = build_response(response)
+      end
+    rescue => e
+      raise NotificationError.new(e), "Unexpected error sending notification: #{e.message}"
     end
-
     responses
 
   end
@@ -77,27 +78,31 @@ class WNS
         { :response => 'success', :body => body, :headers => response.headers,
           :status_code => response.code }
       when 400
-        { :response => 'Invalid request', :body => body, :headers => response.headers,
+        { :response => 'Wrong headers', :body => body, :headers => response.headers,
           :status_code => response.code,
           :reason => body['reason'] || 'unknown' }
-      when 404
-        { :response => 'URL not found', :body => body, :headers => response.headers,
-          :status_code => response.code,
-          :reason => 'unknown' }
       when 401
-        { :response => 'Client authentication failed or auth token invalid',
+        { :response => 'Access token expired',
           :headers => response.headers, :body => body, :status_code => response.code,
           :reason => body['reason'] || 'unknown' }
-      when 413
-        { :response => 'Payload it too large', :body => body, :headers => response.headers,
-          :status_code => response.code,
+      when 403
+        { :response => 'Invalid token',
+          :headers => response.headers, :body => body, :status_code => response.code,
           :reason => body['reason'] || 'unknown' }
-      when 429
+      when 404
+        { :response => 'Invalid token', :body => body, :headers => response.headers,
+          :status_code => response.code,
+          :reason => 'unknown' }
+      when 406
         { :response => 'Exceeded maximum allowable rate of messages',
           :headers => response.headers, :body => body, :status_code => response.code,
           :reason => body['reason'] || 'unknown' }
+      when 413
+        { :response => 'Payload is too large', :body => body, :headers => response.headers,
+          :status_code => response.code,
+          :reason => body['reason'] || 'unknown' }
       when 500
-        { :response => 'There was an internal error in the ADM server',
+        { :response => 'There was an internal error in the WNS server',
           :headers => response.headers, :body => body, :status_code => response.code,
           :reason => body['reason'] || 'unknown' }
       when 503
@@ -146,6 +151,7 @@ class ResponseError < StandardError
   end
 end
 
-# Exception raised when ADM instance fails to retrieve an access key before
+# Exception raised when WNS instance fails to retrieve an access key before
 # pushing data
 class AccessKeyError < ResponseError; end
+class NotificationError < ResponseError; end
